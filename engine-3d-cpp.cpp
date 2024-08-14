@@ -1,5 +1,8 @@
-#include "olcConsoleGameEngine.h"
+﻿#include "olcConsoleGameEngine.h"
 using namespace std;
+#include <fstream>
+#include <strstream>
+#include <algorithm>
 
 struct vec3d
 {
@@ -17,6 +20,42 @@ struct triangle
 struct mesh
 {
 	vector<triangle> tris;
+
+	bool LoadFromObjectFile(string sFilename)
+	{
+		ifstream f(sFilename);
+		if (!f.is_open())
+			return false;
+
+		vector<vec3d> verts;
+
+		while (!f.eof())
+		{
+			char line[128];
+			f.getline(line, 128);
+
+			strstream s;
+			s << line;
+
+			char junk;
+
+			if (line[0] == 'v')
+			{
+				vec3d v;
+				s >> junk >> v.x >> v.y >> v.z;
+				verts.push_back(v);
+			}
+
+			if (line[0] == 'f')
+			{
+				int f[3];
+				s >> junk >> f[0] >> f[1] >> f[2];
+				tris.push_back({ verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1] });
+			}
+		}
+
+		return true;
+	}
 };
 
 struct mat4x4
@@ -91,7 +130,7 @@ private:
 public:
 	bool OnUserCreate() override
 	{
-		meshCube.tris = {
+		/*meshCube.tris = {
 
 			// SOUTH
 			{ 0.0f, 0.0f, 0.0f,    0.0f, 1.0f, 0.0f,    1.0f, 1.0f, 0.0f },
@@ -117,7 +156,9 @@ public:
 			{ 1.0f, 0.0f, 1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f, 0.0f },
 			{ 1.0f, 0.0f, 1.0f,    0.0f, 0.0f, 0.0f,    1.0f, 0.0f, 0.0f },
 
-		};
+		};*/
+
+		meshCube.LoadFromObjectFile("VideoShip.obj");
 
 		// projection matrix
 		float fNear = 0.1f;
@@ -129,7 +170,7 @@ public:
 		matProj.m[0][0] = fAspectRatio * fFovRad;
 		matProj.m[1][1] = fFovRad;
 		matProj.m[2][2] = fFar / (fFar - fNear);
-		matProj.m[3][3] = (-fFar * fNear) / (fFar - fNear);
+		matProj.m[3][2] = (-fFar * fNear) / (fFar - fNear);
 		matProj.m[2][3] = 1.0f;
 		matProj.m[3][3] = 0.0f;
 
@@ -159,6 +200,8 @@ public:
 		matRotX.m[2][2] = cosf(fTheta * 0.5f);
 		matRotX.m[3][3] = 1;
 
+		vector<triangle> vecTrianglesToRaster;
+
 		// draw tris
 		for (auto tri: meshCube.tris)
 		{
@@ -168,14 +211,16 @@ public:
 			MultiplyMatrixVector(tri.p[1], triRotatedZ.p[1], matRotZ);
 			MultiplyMatrixVector(tri.p[2], triRotatedZ.p[2], matRotZ);
 
+			// rotate in x axis
 			MultiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
 			MultiplyMatrixVector(triRotatedZ.p[1], triRotatedZX.p[1], matRotX);
 			MultiplyMatrixVector(triRotatedZ.p[2], triRotatedZX.p[2], matRotX);
 
+			// offset into the screen
 			triTranslated = triRotatedZX;
-			triTranslated.p[0].z = triRotatedZX.p[0].z + 3.0f;
-			triTranslated.p[1].z = triRotatedZX.p[1].z + 3.0f;
-			triTranslated.p[2].z = triRotatedZX.p[2].z + 3.0f;
+			triTranslated.p[0].z = triRotatedZX.p[0].z + 8.0f;
+			triTranslated.p[1].z = triRotatedZX.p[1].z + 8.0f;
+			triTranslated.p[2].z = triRotatedZX.p[2].z + 8.0f;
 
 			vec3d normal, line1, line2;
 			line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
@@ -235,19 +280,32 @@ public:
 				triProjected.p[2].x *= 0.5f * (float)ScreenWidth();
 				triProjected.p[2].y *= 0.5f * (float)ScreenHeight();
 
-				// rasterize tris
-				FillTriangle(
-					triProjected.p[0].x, triProjected.p[0].y,
-					triProjected.p[1].x, triProjected.p[1].y,
-					triProjected.p[2].x, triProjected.p[2].y,
-					triProjected.sym, triProjected.col);
-
-				DrawTriangle(
-					triProjected.p[0].x, triProjected.p[0].y,
-					triProjected.p[1].x, triProjected.p[1].y,
-					triProjected.p[2].x, triProjected.p[2].y,
-					PIXEL_SOLID, FG_BLACK);
+				vecTrianglesToRaster.push_back(triProjected);
 			}			
+		}
+
+		// sort tris from back to front
+		sort(vecTrianglesToRaster.begin(), vecTrianglesToRaster.end(), [](triangle& t1, triangle& t2)
+			{
+				float z1 = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
+				float z2 = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
+				return z1 > z2;
+			});
+
+		for (auto &triProjected : vecTrianglesToRaster)
+		{
+			// rasterize tris
+			FillTriangle(
+				triProjected.p[0].x, triProjected.p[0].y,
+				triProjected.p[1].x, triProjected.p[1].y,
+				triProjected.p[2].x, triProjected.p[2].y,
+				triProjected.sym, triProjected.col);
+
+			/*DrawTriangle(
+				triProjected.p[0].x, triProjected.p[0].y,
+				triProjected.p[1].x, triProjected.p[1].y,
+				triProjected.p[2].x, triProjected.p[2].y,
+				PIXEL_SOLID, FG_BLACK);*/
 		}
 
 		return true;

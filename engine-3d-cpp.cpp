@@ -6,7 +6,10 @@ using namespace std;
 
 struct vec3d
 {
-	float x, y, z;
+	float x = 0;
+	float y = 0;
+	float z = 0;
+	float w = 1;
 };
 
 struct triangle
@@ -79,19 +82,189 @@ private:
 
 	float fTheta;
 
-	void MultiplyMatrixVector(vec3d& i, vec3d& o, mat4x4& m)
+	vec3d Matrix_MultiplyVector(mat4x4& m, vec3d& i)
 	{
-		o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
-		o.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + m.m[3][1];
-		o.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + m.m[3][2];
-		float w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + m.m[3][3];
-		
-		if (w != 0.0f)
-		{
-			o.x /= w;
-			o.y /= w;
-			o.z /= w;
-		}
+		vec3d v;
+		v.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + i.w * m.m[3][0];
+		v.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + i.w * m.m[3][1];
+		v.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + i.w * m.m[3][2];
+		v.w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + i.w * m.m[3][3];
+		return v;
+	}
+
+	mat4x4 Matrix_MakeIdentity()
+	{
+		mat4x4 matrix;
+		matrix.m[0][0] = 1.0f;
+		matrix.m[1][1] = 1.0f;
+		matrix.m[2][2] = 1.0f;
+		matrix.m[3][3] = 1.0f;
+		return matrix;
+	}
+
+	mat4x4 Matrix_MakeRotationX(float fAngleRad)
+	{
+		mat4x4 matrix;
+		matrix.m[0][0] = 1.0f;
+		matrix.m[1][1] = cosf(fAngleRad);
+		matrix.m[1][2] = sinf(fAngleRad);
+		matrix.m[2][1] = -sinf(fAngleRad);
+		matrix.m[2][2] = cosf(fAngleRad);
+		matrix.m[3][3] = 1.0f;
+		return matrix;
+	}
+
+	mat4x4 Matrix_MakeRotationY(float fAngleRad)
+	{
+		mat4x4 matrix;
+		matrix.m[0][0] = cosf(fAngleRad);
+		matrix.m[0][2] = sinf(fAngleRad);
+		matrix.m[2][0] = -sinf(fAngleRad);
+		matrix.m[1][1] = 1.0f;
+		matrix.m[2][2] = cosf(fAngleRad);
+		matrix.m[3][3] = 1.0f;
+		return matrix;
+	}
+
+	mat4x4 Matrix_MakeRotationZ(float fAngleRad)
+	{
+		mat4x4 matrix;
+		matrix.m[0][0] = cosf(fAngleRad);
+		matrix.m[0][1] = sinf(fAngleRad);
+		matrix.m[1][0] = -sinf(fAngleRad);
+		matrix.m[1][1] = cosf(fAngleRad);
+		matrix.m[2][2] = 1.0f;
+		matrix.m[3][3] = 1.0f;
+		return matrix;
+	}
+
+	mat4x4 Matrix_MakeTranslation(float x, float y, float z)
+	{
+		mat4x4 matrix;
+		matrix.m[0][0] = 1.0f;
+		matrix.m[1][1] = 1.0f;
+		matrix.m[2][2] = 1.0f;
+		matrix.m[3][3] = 1.0f;
+		matrix.m[3][0] = x;
+		matrix.m[3][1] = y;
+		matrix.m[3][2] = z;
+		return matrix;
+	}
+
+	mat4x4 Matrix_MakeProjection(float fFovDegrees, float fAspectRatio, float fNear, float fFar)
+	{
+		float fFovRad = 1.0f / tanf(fFovDegrees * 0.5f / 180.0f * 3.14159f);
+		mat4x4 matrix;
+		matrix.m[0][0] = fAspectRatio * fFovRad;
+		matrix.m[1][1] = fFovRad;
+		matrix.m[2][2] = fFar / (fFar - fNear);
+		matrix.m[3][2] = (-fFar * fNear) / (fFar - fNear);
+		matrix.m[2][3] = 1.0f;
+		matrix.m[3][3] = 0.0f;
+		return matrix;
+	}
+
+	mat4x4 Matrix_MultiplyMatrix(mat4x4& m1, mat4x4& m2)
+	{
+		mat4x4 matrix;
+		for (int c = 0; c < 4; c++)
+			for (int r = 0; r < 4; r++)
+				matrix.m[r][c] = m1.m[r][0] * m2.m[0][c] + m1.m[r][1] * m2.m[1][c] + m1.m[r][2] * m2.m[2][c] + m1.m[r][3] * m2.m[3][c];
+		return matrix;
+	}
+
+	mat4x4 Matrix_PointAt(vec3d& pos, vec3d& target, vec3d& up)
+	{
+		// Calculate new forward direction
+		vec3d newForward = Vector_Sub(target, pos);
+		newForward = Vector_Normalise(newForward);
+
+		// Calculate new Up direction
+		vec3d a = Vector_Mul(newForward, Vector_DotProduct(up, newForward));
+		vec3d newUp = Vector_Sub(up, a);
+		newUp = Vector_Normalise(newUp);
+
+		// New Right direction is easy, its just cross product
+		vec3d newRight = Vector_CrossProduct(newUp, newForward);
+
+		// Construct Dimensioning and Translation Matrix	
+		mat4x4 matrix;
+		matrix.m[0][0] = newRight.x;	matrix.m[0][1] = newRight.y;	matrix.m[0][2] = newRight.z;	matrix.m[0][3] = 0.0f;
+		matrix.m[1][0] = newUp.x;		matrix.m[1][1] = newUp.y;		matrix.m[1][2] = newUp.z;		matrix.m[1][3] = 0.0f;
+		matrix.m[2][0] = newForward.x;	matrix.m[2][1] = newForward.y;	matrix.m[2][2] = newForward.z;	matrix.m[2][3] = 0.0f;
+		matrix.m[3][0] = pos.x;			matrix.m[3][1] = pos.y;			matrix.m[3][2] = pos.z;			matrix.m[3][3] = 1.0f;
+		return matrix;
+
+	}
+
+	mat4x4 Matrix_QuickInverse(mat4x4& m) // Only for Rotation/Translation Matrices
+	{
+		mat4x4 matrix;
+		matrix.m[0][0] = m.m[0][0]; matrix.m[0][1] = m.m[1][0]; matrix.m[0][2] = m.m[2][0]; matrix.m[0][3] = 0.0f;
+		matrix.m[1][0] = m.m[0][1]; matrix.m[1][1] = m.m[1][1]; matrix.m[1][2] = m.m[2][1]; matrix.m[1][3] = 0.0f;
+		matrix.m[2][0] = m.m[0][2]; matrix.m[2][1] = m.m[1][2]; matrix.m[2][2] = m.m[2][2]; matrix.m[2][3] = 0.0f;
+		matrix.m[3][0] = -(m.m[3][0] * matrix.m[0][0] + m.m[3][1] * matrix.m[1][0] + m.m[3][2] * matrix.m[2][0]);
+		matrix.m[3][1] = -(m.m[3][0] * matrix.m[0][1] + m.m[3][1] * matrix.m[1][1] + m.m[3][2] * matrix.m[2][1]);
+		matrix.m[3][2] = -(m.m[3][0] * matrix.m[0][2] + m.m[3][1] * matrix.m[1][2] + m.m[3][2] * matrix.m[2][2]);
+		matrix.m[3][3] = 1.0f;
+		return matrix;
+	}
+
+	vec3d Vector_Add(vec3d& v1, vec3d& v2)
+	{
+		return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
+	}
+
+	vec3d Vector_Sub(vec3d& v1, vec3d& v2)
+	{
+		return { v1.x - v2.x, v1.y - v2.y, v1.z - v2.z };
+	}
+
+	vec3d Vector_Mul(vec3d& v1, float k)
+	{
+		return { v1.x * k, v1.y * k, v1.z * k };
+	}
+
+	vec3d Vector_Div(vec3d& v1, float k)
+	{
+		return { v1.x / k, v1.y / k, v1.z / k };
+	}
+
+	float Vector_DotProduct(vec3d& v1, vec3d& v2)
+	{
+		return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+	}
+
+	float Vector_Length(vec3d& v)
+	{
+		return sqrtf(Vector_DotProduct(v, v));
+	}
+
+	vec3d Vector_Normalise(vec3d& v)
+	{
+		float l = Vector_Length(v);
+		return { v.x / l, v.y / l, v.z / l };
+	}
+
+	vec3d Vector_CrossProduct(vec3d& v1, vec3d& v2)
+	{
+		vec3d v;
+		v.x = v1.y * v2.z - v1.z * v2.y;
+		v.y = v1.z * v2.x - v1.x * v2.z;
+		v.z = v1.x * v2.y - v1.y * v2.x;
+		return v;
+	}
+
+	vec3d Vector_IntersectPlane(vec3d& plane_p, vec3d& plane_n, vec3d& lineStart, vec3d& lineEnd)
+	{
+		plane_n = Vector_Normalise(plane_n);
+		float plane_d = -Vector_DotProduct(plane_n, plane_p);
+		float ad = Vector_DotProduct(lineStart, plane_n);
+		float bd = Vector_DotProduct(lineEnd, plane_n);
+		float t = (-plane_d - ad) / (bd - ad);
+		vec3d lineStartToEnd = Vector_Sub(lineEnd, lineStart);
+		vec3d lineToIntersect = Vector_Mul(lineStartToEnd, t);
+		return Vector_Add(lineStart, lineToIntersect);
 	}
 
 	CHAR_INFO GetColour(float lum)
@@ -130,49 +303,11 @@ private:
 public:
 	bool OnUserCreate() override
 	{
-		/*meshCube.tris = {
-
-			// SOUTH
-			{ 0.0f, 0.0f, 0.0f,    0.0f, 1.0f, 0.0f,    1.0f, 1.0f, 0.0f },
-			{ 0.0f, 0.0f, 0.0f,    1.0f, 1.0f, 0.0f,    1.0f, 0.0f, 0.0f },
-
-			// EAST                                                      
-			{ 1.0f, 0.0f, 0.0f,    1.0f, 1.0f, 0.0f,    1.0f, 1.0f, 1.0f },
-			{ 1.0f, 0.0f, 0.0f,    1.0f, 1.0f, 1.0f,    1.0f, 0.0f, 1.0f },
-
-			// NORTH                                                     
-			{ 1.0f, 0.0f, 1.0f,    1.0f, 1.0f, 1.0f,    0.0f, 1.0f, 1.0f },
-			{ 1.0f, 0.0f, 1.0f,    0.0f, 1.0f, 1.0f,    0.0f, 0.0f, 1.0f },
-
-			// WEST                                                      
-			{ 0.0f, 0.0f, 1.0f,    0.0f, 1.0f, 1.0f,    0.0f, 1.0f, 0.0f },
-			{ 0.0f, 0.0f, 1.0f,    0.0f, 1.0f, 0.0f,    0.0f, 0.0f, 0.0f },
-
-			// TOP                                                       
-			{ 0.0f, 1.0f, 0.0f,    0.0f, 1.0f, 1.0f,    1.0f, 1.0f, 1.0f },
-			{ 0.0f, 1.0f, 0.0f,    1.0f, 1.0f, 1.0f,    1.0f, 1.0f, 0.0f },
-
-			// BOTTOM                                                    
-			{ 1.0f, 0.0f, 1.0f,    0.0f, 0.0f, 1.0f,    0.0f, 0.0f, 0.0f },
-			{ 1.0f, 0.0f, 1.0f,    0.0f, 0.0f, 0.0f,    1.0f, 0.0f, 0.0f },
-
-		};*/
-
-		meshCube.LoadFromObjectFile("VideoShip.obj");
+		//meshCube.LoadFromObjectFile("VideoShip.obj");
+		meshCube.LoadFromObjectFile("teapot.obj");
 
 		// projection matrix
-		float fNear = 0.1f;
-		float fFar = 1000.0f;
-		float fFov = 90.0f;
-		float fAspectRatio = (float)ScreenHeight() / (float)ScreenWidth();
-		float fFovRad = 1.0f / tanf(fFov * 0.5f / 180.0f * 3.14159f);
-
-		matProj.m[0][0] = fAspectRatio * fFovRad;
-		matProj.m[1][1] = fFovRad;
-		matProj.m[2][2] = fFar / (fFar - fNear);
-		matProj.m[3][2] = (-fFar * fNear) / (fFar - fNear);
-		matProj.m[2][3] = 1.0f;
-		matProj.m[3][3] = 0.0f;
+		matProj = Matrix_MakeProjection(90.0f, (float)ScreenHeight() / (float)ScreenWidth(), 0.1f, 1000.0f);
 
 		return true;
 	}
@@ -184,94 +319,67 @@ public:
 		mat4x4 matRotZ, matRotX;
 		fTheta += 1.0f * fElapsedTime;
 
-		// rotation Z
-		matRotZ.m[0][0] = cosf(fTheta);
-		matRotZ.m[0][1] = sinf(fTheta);
-		matRotZ.m[1][0] = -sinf(fTheta);
-		matRotZ.m[1][1] = cosf(fTheta);
-		matRotZ.m[2][2] = 1;
-		matRotZ.m[3][3] = 1;
+		matRotZ = Matrix_MakeRotationZ(fTheta);
+		matRotX = Matrix_MakeRotationX(fTheta);
 
-		// rotation X
-		matRotX.m[0][0] = 1;
-		matRotX.m[1][1] = cosf(fTheta * 0.5f);
-		matRotX.m[1][2] = sinf(fTheta * 0.5f);
-		matRotX.m[2][1] = -sinf(fTheta * 0.5f);
-		matRotX.m[2][2] = cosf(fTheta * 0.5f);
-		matRotX.m[3][3] = 1;
+		mat4x4 matTrans;
+		matTrans = Matrix_MakeTranslation(0.0f, 0.0f, 16.0f);
 
+		mat4x4 matWorld;
+		matWorld = Matrix_MakeIdentity();
+		matWorld = Matrix_MultiplyMatrix(matRotZ, matRotX);
+		matWorld = Matrix_MultiplyMatrix(matWorld, matTrans);
+
+		// store tris for rastering later
 		vector<triangle> vecTrianglesToRaster;
 
 		// draw tris
 		for (auto tri: meshCube.tris)
 		{
-			triangle triProjected, triTranslated, triRotatedZ, triRotatedZX;
+			triangle triProjected, triTransformed;
 
-			MultiplyMatrixVector(tri.p[0], triRotatedZ.p[0], matRotZ);
-			MultiplyMatrixVector(tri.p[1], triRotatedZ.p[1], matRotZ);
-			MultiplyMatrixVector(tri.p[2], triRotatedZ.p[2], matRotZ);
-
-			// rotate in x axis
-			MultiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
-			MultiplyMatrixVector(triRotatedZ.p[1], triRotatedZX.p[1], matRotX);
-			MultiplyMatrixVector(triRotatedZ.p[2], triRotatedZX.p[2], matRotX);
-
-			// offset into the screen
-			triTranslated = triRotatedZX;
-			triTranslated.p[0].z = triRotatedZX.p[0].z + 8.0f;
-			triTranslated.p[1].z = triRotatedZX.p[1].z + 8.0f;
-			triTranslated.p[2].z = triRotatedZX.p[2].z + 8.0f;
-
+			triTransformed.p[0] = Matrix_MultiplyVector(matWorld, tri.p[0]);
+			triTransformed.p[1] = Matrix_MultiplyVector(matWorld, tri.p[1]);
+			triTransformed.p[2] = Matrix_MultiplyVector(matWorld, tri.p[2]);
+			
 			vec3d normal, line1, line2;
-			line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
-			line1.y = triTranslated.p[1].y - triTranslated.p[0].y;
-			line1.z = triTranslated.p[1].z - triTranslated.p[0].z;
 
-			line2.x = triTranslated.p[2].x - triTranslated.p[0].x;
-			line2.y = triTranslated.p[2].y - triTranslated.p[0].y;
-			line2.z = triTranslated.p[2].z - triTranslated.p[0].z;
+			line1 = Vector_Sub(triTransformed.p[1], triTransformed.p[0]);
+			line2 = Vector_Sub(triTransformed.p[2], triTransformed.p[0]);
 
-			normal.x = line1.y * line2.z - line1.z * line2.y;
-			normal.y = line1.z * line2.x - line1.x * line2.z;
-			normal.z = line1.x * line2.y - line1.y * line2.x;
+			normal = Vector_CrossProduct(line1, line2);
+			normal = Vector_Normalise(normal);
 
-			float l = sqrtf(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-			normal.x /= l;
-			normal.y /= l;
-			normal.z /= l;
+			vec3d vCameraRay = Vector_Sub(triTransformed.p[0], vCamera);
 
-			//if (normal.z < 0)
-			if (normal.x * (triTranslated.p[0].x - vCamera.x) +
-				 normal.y * (triTranslated.p[0].y - vCamera.y) +
-				 normal.z * (triTranslated.p[0].z - vCamera.z) < 0.0f)
+			if (Vector_DotProduct(normal, vCameraRay) < 0.0f)
 			{
 				// illumination
 				vec3d light_direction = { 0.0f, 0.0f, -1.0f };
-				float l = sqrtf(light_direction.x * light_direction.x + light_direction.y * light_direction.y + light_direction.z * light_direction.z);
-				light_direction.x /= l;
-				light_direction.y /= l;
-				light_direction.z /= l;
+				light_direction = Vector_Normalise(light_direction);
 
-				float dp = normal.x * light_direction.x + normal.y * light_direction.y + normal.z * light_direction.z;
+				float dp = max(0.1f, Vector_DotProduct(light_direction, normal));
 
 				CHAR_INFO c = GetColour(dp);
-				triTranslated.col = c.Attributes;
-				triTranslated.sym = c.Char.UnicodeChar;
+				triTransformed.col = c.Attributes;
+				triTransformed.sym = c.Char.UnicodeChar;
 
 				// project tris from 3d to 2d
-				MultiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);
-				MultiplyMatrixVector(triTranslated.p[1], triProjected.p[1], matProj);
-				MultiplyMatrixVector(triTranslated.p[2], triProjected.p[2], matProj);
-				triProjected.col = triTranslated.col;
-				triProjected.sym = triTranslated.sym;
+				triProjected.p[0] = Matrix_MultiplyVector(matProj, triTransformed.p[0]);
+				triProjected.p[1] = Matrix_MultiplyVector(matProj, triTransformed.p[1]);
+				triProjected.p[2] = Matrix_MultiplyVector(matProj, triTransformed.p[2]);
+				triProjected.col = triTransformed.col;
+				triProjected.sym = triTransformed.sym;
+
+				triProjected.p[0] = Vector_Div(triProjected.p[0], triProjected.p[0].w);
+				triProjected.p[1] = Vector_Div(triProjected.p[1], triProjected.p[1].w);
+				triProjected.p[2] = Vector_Div(triProjected.p[2], triProjected.p[2].w);
 
 				// scale into view
-				triProjected.p[0].x += 1.0f;
-				triProjected.p[0].y += 1.0f;
-				triProjected.p[1].x += 1.0f;
-				triProjected.p[1].y += 1.0f;
-				triProjected.p[2].x += 1.0f;
-				triProjected.p[2].y += 1.0f;
+				vec3d vOffsetView = { 1,1,0 };
+				triProjected.p[0] = Vector_Add(triProjected.p[0], vOffsetView);
+				triProjected.p[1] = Vector_Add(triProjected.p[1], vOffsetView);
+				triProjected.p[2] = Vector_Add(triProjected.p[2], vOffsetView);	
 
 				triProjected.p[0].x *= 0.5f * (float)ScreenWidth();
 				triProjected.p[0].y *= 0.5f * (float)ScreenHeight();

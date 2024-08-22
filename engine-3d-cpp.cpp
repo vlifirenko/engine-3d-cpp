@@ -79,6 +79,9 @@ private:
 	mat4x4 matProj;
 
 	vec3d vCamera;
+	vec3d vLookDir;
+
+	float fYaw;
 
 	float fTheta;
 
@@ -304,7 +307,8 @@ public:
 	bool OnUserCreate() override
 	{
 		//meshCube.LoadFromObjectFile("VideoShip.obj");
-		meshCube.LoadFromObjectFile("teapot.obj");
+		//meshCube.LoadFromObjectFile("teapot.obj");
+		meshCube.LoadFromObjectFile("axis.obj");
 
 		// projection matrix
 		matProj = Matrix_MakeProjection(90.0f, (float)ScreenHeight() / (float)ScreenWidth(), 0.1f, 1000.0f);
@@ -314,21 +318,53 @@ public:
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+		if (GetKey(VK_UP).bHeld)
+			vCamera.y += 8.0f * fElapsedTime;
+		if (GetKey(VK_DOWN).bHeld)
+			vCamera.y -= 8.0f * fElapsedTime;
+		if (GetKey(VK_LEFT).bHeld)
+			vCamera.x -= 8.0f * fElapsedTime;
+		if (GetKey(VK_RIGHT).bHeld)
+			vCamera.x += 8.0f * fElapsedTime;
+
+		vec3d vForward = Vector_Mul(vLookDir, 8.0f * fElapsedTime);
+
+		if (GetKey(L'W').bHeld)
+			vCamera = Vector_Add(vCamera, vForward);
+		if (GetKey(L'S').bHeld)
+			vCamera = Vector_Sub(vCamera, vForward);
+
+		if (GetKey(L'A').bHeld)
+			fYaw += 2.0f * fElapsedTime;
+		if (GetKey(L'D').bHeld)
+			fYaw -= 2.0f * fElapsedTime;
+
 		Fill(0, 0, ScreenWidth(), ScreenHeight(), PIXEL_SOLID, FG_BLACK);
 
 		mat4x4 matRotZ, matRotX;
-		fTheta += 1.0f * fElapsedTime;
+		//fTheta += 1.0f * fElapsedTime;
 
-		matRotZ = Matrix_MakeRotationZ(fTheta);
+		matRotZ = Matrix_MakeRotationZ(fTheta * 0.5f);
 		matRotX = Matrix_MakeRotationX(fTheta);
 
 		mat4x4 matTrans;
-		matTrans = Matrix_MakeTranslation(0.0f, 0.0f, 16.0f);
+		matTrans = Matrix_MakeTranslation(0.0f, 0.0f, 5.0f);
 
 		mat4x4 matWorld;
 		matWorld = Matrix_MakeIdentity();
 		matWorld = Matrix_MultiplyMatrix(matRotZ, matRotX);
 		matWorld = Matrix_MultiplyMatrix(matWorld, matTrans);
+
+		vec3d vUp = { 0,1,0 };
+		vec3d vTarget = { 0,0,1 };
+		mat4x4 matCameraRot = Matrix_MakeRotationY(fYaw);
+		vLookDir = Matrix_MultiplyVector(matCameraRot, vTarget);
+		vTarget = Vector_Add(vCamera, vLookDir);
+
+		mat4x4 matCamera = Matrix_PointAt(vCamera, vTarget, vUp);
+
+		// make view matrix from camera
+		mat4x4 matView = Matrix_QuickInverse(matCamera);
 
 		// store tris for rastering later
 		vector<triangle> vecTrianglesToRaster;
@@ -336,7 +372,7 @@ public:
 		// draw tris
 		for (auto tri: meshCube.tris)
 		{
-			triangle triProjected, triTransformed;
+			triangle triProjected, triTransformed, triViewed;
 
 			triTransformed.p[0] = Matrix_MultiplyVector(matWorld, tri.p[0]);
 			triTransformed.p[1] = Matrix_MultiplyVector(matWorld, tri.p[1]);
@@ -364,10 +400,15 @@ public:
 				triTransformed.col = c.Attributes;
 				triTransformed.sym = c.Char.UnicodeChar;
 
+				// convert world space to view space
+				triViewed.p[0] = Matrix_MultiplyVector(matView, triTransformed.p[0]);
+				triViewed.p[1] = Matrix_MultiplyVector(matView, triTransformed.p[1]);
+				triViewed.p[2] = Matrix_MultiplyVector(matView, triTransformed.p[2]);
+
 				// project tris from 3d to 2d
-				triProjected.p[0] = Matrix_MultiplyVector(matProj, triTransformed.p[0]);
-				triProjected.p[1] = Matrix_MultiplyVector(matProj, triTransformed.p[1]);
-				triProjected.p[2] = Matrix_MultiplyVector(matProj, triTransformed.p[2]);
+				triProjected.p[0] = Matrix_MultiplyVector(matProj, triViewed.p[0]);
+				triProjected.p[1] = Matrix_MultiplyVector(matProj, triViewed.p[1]);
+				triProjected.p[2] = Matrix_MultiplyVector(matProj, triViewed.p[2]);
 				triProjected.col = triTransformed.col;
 				triProjected.sym = triTransformed.sym;
 

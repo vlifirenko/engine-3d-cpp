@@ -270,14 +270,15 @@ private:
 		return Vector_Add(lineStart, lineToIntersect);
 	}
 
-	int Triangle_ClipAgainstPlane(vec3d plane_p, vec3d plane_n, triangle& in_tri, triangle& out_tri1, triangle& out_tri2, triangle& out_tri3)
+	int Triangle_ClipAgainstPlane(vec3d plane_p, vec3d plane_n, triangle& in_tri,
+		triangle& out_tri1, triangle& out_tri2)
 	{
 		plane_n = Vector_Normalise(plane_p);
 		
 		auto dist = [&](vec3d& p)
 			{
 				vec3d n = Vector_Normalise(p);
-				return (plane_n.x * p.x + plane_n.y * p.y + plane_n.z * p.z - Vector_DotProduct(plane_n, plane_p);
+				return (plane_n.x * p.x + plane_n.y * p.y + plane_n.z * p.z - Vector_DotProduct(plane_n, plane_p));
 			};
 
 		vec3d* inside_points[3];
@@ -480,31 +481,49 @@ public:
 				triViewed.p[1] = Matrix_MultiplyVector(matView, triTransformed.p[1]);
 				triViewed.p[2] = Matrix_MultiplyVector(matView, triTransformed.p[2]);
 
-				// project tris from 3d to 2d
-				triProjected.p[0] = Matrix_MultiplyVector(matProj, triViewed.p[0]);
-				triProjected.p[1] = Matrix_MultiplyVector(matProj, triViewed.p[1]);
-				triProjected.p[2] = Matrix_MultiplyVector(matProj, triViewed.p[2]);
-				triProjected.col = triTransformed.col;
-				triProjected.sym = triTransformed.sym;
+				int nClippedTris = 0;
+				triangle clipped[2];
+				nClippedTris = Triangle_ClipAgainstPlane(
+					{ 0.0f, 0.0f, 0.1f },
+					{ 0.0f, 0.0f, 1.0f },
+					triViewed, clipped[0], clipped[1]);
 
-				triProjected.p[0] = Vector_Div(triProjected.p[0], triProjected.p[0].w);
-				triProjected.p[1] = Vector_Div(triProjected.p[1], triProjected.p[1].w);
-				triProjected.p[2] = Vector_Div(triProjected.p[2], triProjected.p[2].w);
+				for (int n = 0; n < nClippedTris; n++)
+				{
+					// project tris from 3d to 2d
+					triProjected.p[0] = Matrix_MultiplyVector(matProj, clipped[n].p[0]);
+					triProjected.p[1] = Matrix_MultiplyVector(matProj, clipped[n].p[1]);
+					triProjected.p[2] = Matrix_MultiplyVector(matProj, clipped[n].p[2]);
+					triProjected.col = triTransformed.col;
+					triProjected.sym = triTransformed.sym;
 
-				// scale into view
-				vec3d vOffsetView = { 1,1,0 };
-				triProjected.p[0] = Vector_Add(triProjected.p[0], vOffsetView);
-				triProjected.p[1] = Vector_Add(triProjected.p[1], vOffsetView);
-				triProjected.p[2] = Vector_Add(triProjected.p[2], vOffsetView);	
+					// scale into view
+					triProjected.p[0] = Vector_Div(triProjected.p[0], triProjected.p[0].w);
+					triProjected.p[1] = Vector_Div(triProjected.p[1], triProjected.p[1].w);
+					triProjected.p[2] = Vector_Div(triProjected.p[2], triProjected.p[2].w);
 
-				triProjected.p[0].x *= 0.5f * (float)ScreenWidth();
-				triProjected.p[0].y *= 0.5f * (float)ScreenHeight();
-				triProjected.p[1].x *= 0.5f * (float)ScreenWidth();
-				triProjected.p[1].y *= 0.5f * (float)ScreenHeight();
-				triProjected.p[2].x *= 0.5f * (float)ScreenWidth();
-				triProjected.p[2].y *= 0.5f * (float)ScreenHeight();
+					// x/y was inverted
+					triProjected.p[0].x *= -1.0f;
+					triProjected.p[1].x *= -1.0f;
+					triProjected.p[2].x *= -1.0f;
+					triProjected.p[0].y *= -1.0f;
+					triProjected.p[1].y *= -1.0f;
+					triProjected.p[2].y *= -1.0f;
 
-				vecTrianglesToRaster.push_back(triProjected);
+					vec3d vOffsetView = { 1,1,0 };
+					triProjected.p[0] = Vector_Add(triProjected.p[0], vOffsetView);
+					triProjected.p[1] = Vector_Add(triProjected.p[1], vOffsetView);
+					triProjected.p[2] = Vector_Add(triProjected.p[2], vOffsetView);
+
+					triProjected.p[0].x *= 0.5f * (float)ScreenWidth();
+					triProjected.p[0].y *= 0.5f * (float)ScreenHeight();
+					triProjected.p[1].x *= 0.5f * (float)ScreenWidth();
+					triProjected.p[1].y *= 0.5f * (float)ScreenHeight();
+					triProjected.p[2].x *= 0.5f * (float)ScreenWidth();
+					triProjected.p[2].y *= 0.5f * (float)ScreenHeight();
+
+					vecTrianglesToRaster.push_back(triProjected);
+				}
 			}			
 		}
 
@@ -516,7 +535,7 @@ public:
 				return z1 > z2;
 			});
 
-		for (auto &triProjected : vecTrianglesToRaster)
+		/*for (auto &triProjected : vecTrianglesToRaster)
 		{
 			// rasterize tris
 			FillTriangle(
@@ -525,11 +544,69 @@ public:
 				triProjected.p[2].x, triProjected.p[2].y,
 				triProjected.sym, triProjected.col);
 
-			/*DrawTriangle(
+			DrawTriangle(
 				triProjected.p[0].x, triProjected.p[0].y,
 				triProjected.p[1].x, triProjected.p[1].y,
 				triProjected.p[2].x, triProjected.p[2].y,
-				PIXEL_SOLID, FG_BLACK);*/
+				PIXEL_SOLID, FG_BLACK);
+		}*/
+
+		for (auto &triToRaster : vecTrianglesToRaster)
+		{
+			triangle clipped[2];
+			list<triangle> listTriangles;
+			listTriangles.push_back(triToRaster);
+			int nNewTriangles = 1;
+
+			for (int p = 0; p < 4; p++)
+			{
+				int nTrisToAdd = 0;
+				while (nNewTriangles > 0)
+				{
+					triangle test = listTriangles.front();
+					listTriangles.pop_front();
+					nNewTriangles--;
+
+					switch (p)
+					{
+					case 0:
+						nTrisToAdd = Triangle_ClipAgainstPlane(
+							{ 0.0f, 0.0f, 0.0f },
+							{ 0.0f, 1.0f, 0.0f },
+							test, clipped[0], clipped[1]);
+						break;
+					case 1:
+						nTrisToAdd = Triangle_ClipAgainstPlane(
+							{ 0.0f, (float)ScreenHeight() - 1, 0.0f },
+							{ 0.0f, -1.0f, 0.0f },
+							test, clipped[0], clipped[1]);
+						break;
+					case 2:
+						nTrisToAdd = Triangle_ClipAgainstPlane(
+							{ 0.0f, 0.0f, 0.0f },
+							{ 1.0f, 0.0f, 0.0f },
+							test, clipped[0], clipped[1]);
+						break;
+					case 3:
+						nTrisToAdd = Triangle_ClipAgainstPlane(
+							{ (float)ScreenWidth() - 1, 0.0f, 0.0f},
+							{ -1.0f, 0.0f, 0.0f },
+							test, clipped[0], clipped[1]);
+						break;
+					}
+
+					for (int w = 0; w < nTrisToAdd; w++)
+						listTriangles.push_back(clipped[w]);
+				}
+
+				nNewTriangles = listTriangles.size();
+			}
+
+			for (auto& t : listTriangles)
+			{
+				FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, t.sym, t.col);
+				DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, PIXEL_SOLID, FG_BLACK);
+			}
 		}
 
 		return true;

@@ -494,8 +494,8 @@ public:
 					triProjected.p[0] = Matrix_MultiplyVector(matProj, clipped[n].p[0]);
 					triProjected.p[1] = Matrix_MultiplyVector(matProj, clipped[n].p[1]);
 					triProjected.p[2] = Matrix_MultiplyVector(matProj, clipped[n].p[2]);
-					triProjected.col = triTransformed.col;
-					triProjected.sym = triTransformed.sym;
+					triProjected.col = clipped[n].col;
+					triProjected.sym = clipped[n].sym;
 
 					// scale into view
 					triProjected.p[0] = Vector_Div(triProjected.p[0], triProjected.p[0].w);

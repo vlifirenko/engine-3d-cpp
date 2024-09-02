@@ -83,13 +83,12 @@ public:
 private:
 	mesh meshCube;
 	mat4x4 matProj;
-
 	vec3d vCamera;
 	vec3d vLookDir;
-
 	float fYaw;
-
 	float fTheta;
+
+	olcSprite* sprTex1;
 
 	vec3d Matrix_MultiplyVector(mat4x4& m, vec3d& i)
 	{
@@ -426,6 +425,8 @@ public:
 		//meshCube.LoadFromObjectFile("teapot.obj");
 		meshCube.LoadFromObjectFile("axis.obj");
 
+		sprTex1 = new olcSprite(L"Jario.spr")
+
 		// projection matrix
 		matProj = Matrix_MakeProjection(90.0f, (float)ScreenHeight() / (float)ScreenWidth(), 0.1f, 1000.0f);
 
@@ -655,12 +656,161 @@ public:
 
 			for (auto& t : listTriangles)
 			{
+				TexturedTriangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v,
+					t.p[1].x, t.p[1].y, t.t[1].u, t.t[1].v,
+					t.p[2].x, t.p[2].y, t.t[2].u, t.t[2].v, sprTex1);
+
 				//FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, t.sym, t.col);
 				DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, PIXEL_SOLID, FG_WHITE);
 			}
 		}
 
 		return true;
+	}
+
+	void TexturedTriangle(int x1, int y1, float u1, float v1,
+								int x2, int y2, float u2, float v2,
+								int x3, int y3, float u3, float v3,
+								olcSprite* tex)
+	{
+		if (y2 < y1)
+		{
+			swap(y1, y2);
+			swap(x1, x2);
+			swap(u1, u2);
+			swap(v1, v2);
+		}
+		if (y3 < y1)
+		{
+			swap(y1, y3);
+			swap(x1, x3);
+			swap(u1, u3);
+			swap(v1, v3);
+		}
+		if (y3 < y2)
+		{
+			swap(y2, y3);
+			swap(x2, x3);
+			swap(u2, u3);
+			swap(v2, v3);
+		}
+
+		int dy1 = y2 - y1;
+		int dx1 = x2 - x1;
+		float dv1 = v2 - v1;
+		float du1 = u2 - u1;
+
+		int dy2 = y3 - y1;
+		int dx2 = x3 - x1;
+		float dv2 = v3 - v1;
+		float du2 = u3 - u1;
+
+		float tex_u, tex_v;
+
+		float dax_step = 0, dbx_step = 0,
+			du1_step = 0, dv1_step = 0,
+			du2_step = 0, dv2_step = 0;
+
+		if (dy1)
+			dax_step = dx1 / (float)abs(dy1);
+		if (dy2)
+			dbx_step = dx2 / (float)abs(dy2);
+
+		if (dy1)
+			du1_step = du1 / (float)abs(dy1);
+		if (dy1)
+			dv1_step = dv1 / (float)abs(dy1);
+
+		if (dy2)
+			du2_step = du2 / (float)abs(dy2);
+		if (dy2)
+			dv2_step = dv2 / (float)abs(dy2);
+
+		if (dy1)
+		{
+			for (int i = y1; i <= y2; i++)
+			{
+				int ax = x1 + (float)(i - y1) * dax_step;
+				int bx = x1 + (float)(i - y1) * dbx_step;
+
+				float tex_su = u1 + (float)(i - y1) * du1_step;
+				float tex_sv = v1 + (float)(i - y1) * dv1_step;
+
+				float tex_eu = u1 + (float)(i - y1) * du2_step;
+				float tex_ev = v1 + (float)(i - y1) * dv2_step;
+
+				if (ax > bx)
+				{
+					swap(ax, bx);
+					swap(tex_su, tex_eu);
+					swap(tex_sv, tex_ev);
+				}
+
+				tex_u = tex_su;
+				tex_v = tex_sv;
+
+				float tstep = 1.0f / ((float)(bx - ax));
+				float t = 0.0f;
+
+				for (int j = ax; j < bx; j++)
+				{
+					tex_u = (1.0f - t) * tex_su + t * tex_eu;
+					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+					Draw(j, i, tex->SampleGlyph(tex_u, tex_v), tex->SampleColour(tex_u, tex_v));
+					
+					t += tstep;
+				}
+			}
+
+			dy1 = y3 - y2;
+			dx1 = x3 - x2;
+			dv1 = v3 - v2;
+			du1 = u3 - u2;
+			if (dy1)
+				dax_step = dx1 / (float)abs(dy1);
+			if (dy2)
+				dbx_step = dx2 / (float)abs(dy2);
+
+			du1_step = 0, dv1_step = 0;
+			if (dy1)
+				du1_step = du1 / (float)abs(dy1);
+			if (dy1)
+				dv1_step = dv1 / (float)abs(dy1);
+
+			for (int i = y2; i <= y3; i++)
+			{
+				int ax = x2 + (float)(i - y2) * dax_step;
+				int bx = x1 + (float)(i - y1) * dbx_step;
+
+				float tex_su = u2 + (float)(i - y2) * du1_step;
+				float tex_sv = v2 + (float)(i - y2) * dv1_step;
+
+				float tex_eu = u1 + (float)(i - y1) * du2_step;
+				float tex_ev = v1 + (float)(i - y1) * dv2_step;
+
+				if (ax > bx)
+				{
+					swap(ax, bx);
+					swap(tex_su, tex_eu);
+					swap(tex_sv, tex_ev);
+				}
+
+				tex_u = tex_su;
+				tex_v = tex_sv;
+
+				float tstep = 1.0f / ((float)(bx - ax));
+				float t = 0.0f;
+
+				for (int j = ax; j < bx; j++)
+				{
+					tex_u = (1.0f - t) * tex_su + t * tex_eu;
+					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
+					Draw(j, i, tex->SampleGlyph(tex_u, tex_v), tex->SampleColour(tex_u, tex_v));
+
+					t += tstep;
+				}
+			}
+		}
 	}
 };
 

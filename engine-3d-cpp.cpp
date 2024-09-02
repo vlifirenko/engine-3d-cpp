@@ -375,11 +375,12 @@ private:
 			out_tri1.t[0] = *inside_tex[0];
 			out_tri1.t[1] = *inside_tex[1];
 
-			out_tri1.p[2] = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0]);
+			float t;
+			out_tri1.p[2] = Vector_IntersectPlane(plane_p, plane_n, *inside_points[0], *outside_points[0], t);
 
 			out_tri2.p[0] = *inside_points[1];
 			out_tri2.p[1] = out_tri1.p[2];
-			out_tri2.p[2] = Vector_IntersectPlane(plane_p, plane_n, *inside_points[1], *outside_points[1]);
+			out_tri2.p[2] = Vector_IntersectPlane(plane_p, plane_n, *inside_points[1], *outside_points[1], t);
 
 			return 2;
 		}
@@ -655,7 +656,7 @@ public:
 			for (auto& t : listTriangles)
 			{
 				//FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, t.sym, t.col);
-				DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, PIXEL_SOLID, FG_WHIE);
+				DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, PIXEL_SOLID, FG_WHITE);
 			}
 		}
 

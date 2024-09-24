@@ -1,12 +1,14 @@
-﻿#include "olcConsoleGameEngine.h"
-using namespace std;
+﻿#include "olcConsoleGameEngineGL.h"
 #include <fstream>
 #include <strstream>
 #include <algorithm>
+#include <string>
+using namespace std;
 
 struct vec2d
 {
 	float u = 0, v = 0;
+	float w = 0;
 };
 
 struct vec3d
@@ -30,13 +32,14 @@ struct mesh
 {
 	vector<triangle> tris;
 
-	bool LoadFromObjectFile(string sFilename)
+	bool LoadFromObjectFile(string sFilename, bool bHasTexture = false)
 	{
 		ifstream f(sFilename);
 		if (!f.is_open())
 			return false;
 
 		vector<vec3d> verts;
+		vector<vec2d> texs;
 
 		while (!f.eof())
 		{
@@ -50,16 +53,56 @@ struct mesh
 
 			if (line[0] == 'v')
 			{
-				vec3d v;
-				s >> junk >> v.x >> v.y >> v.z;
-				verts.push_back(v);
+				if (line[1] == 't')
+				{
+					vec2d v;
+					s >> junk >> junk >> v.u >> v.v;
+					texs.push_back(v);
+				}
+				else
+				{
+					vec3d v;
+					s >> junk >> v.x >> v.y >> v.z;
+					verts.push_back(v);
+				}
+
+				
 			}
 
-			if (line[0] == 'f')
+			if (!bHasTexture)
 			{
-				int f[3];
-				s >> junk >> f[0] >> f[1] >> f[2];
-				tris.push_back({ verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1] });
+				if (line[0] == 'f')
+				{
+					int f[3];
+					s >> junk >> f[0] >> f[1] >> f[2];
+					tris.push_back({ verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1] });
+				}
+			}
+			else
+			{
+				if (line[0] == 'f')
+				{
+					s >> junk;
+
+					string tokens[6];
+					int nTokenCount = -1;
+
+
+					while (!s.eof())
+					{
+						char c = s.get();
+						if (c == ' ' || c == '/')
+							nTokenCount++;
+						else
+							tokens[nTokenCount].append(1, c);
+					}
+
+					tokens[nTokenCount].pop_back();
+
+
+					tris.push_back({ verts[stoi(tokens[0]) - 1], verts[stoi(tokens[2]) - 1], verts[stoi(tokens[4]) - 1],
+						texs[stoi(tokens[1]) - 1], texs[stoi(tokens[3]) - 1], texs[stoi(tokens[5]) - 1] });
+				}
 			}
 		}
 
@@ -418,14 +461,20 @@ private:
 		return c;
 	}
 
+	float* pDepthBuffer = nullptr;
+
 public:
 	bool OnUserCreate() override
 	{
+		pDepthBuffer = new float[ScreenWidth() * ScreenHeight()];
+
 		//meshCube.LoadFromObjectFile("VideoShip.obj");
 		//meshCube.LoadFromObjectFile("teapot.obj");
-		meshCube.LoadFromObjectFile("axis.obj");
+		//meshCube.LoadFromObjectFile("axis.obj");
+		meshCube.LoadFromObjectFile("spyro_level.obj", true);
 
-		sprTex1 = new olcSprite(L"Jario.spr")
+		//sprTex1 = new olcSprite(L"Jario.spr");
+		sprTex1 = new olcSprite(L"spyro_high_fix.spr");
 
 		// projection matrix
 		matProj = Matrix_MakeProjection(90.0f, (float)ScreenHeight() / (float)ScreenWidth(), 0.1f, 1000.0f);
@@ -549,6 +598,18 @@ public:
 					triProjected.t[1] = clipped[n].t[1];
 					triProjected.t[2] = clipped[n].t[2];
 
+					triProjected.t[0].u = triProjected.t[0].u / triProjected.p[0].w;
+					triProjected.t[1].u = triProjected.t[1].u / triProjected.p[1].w;
+					triProjected.t[2].u = triProjected.t[2].u / triProjected.p[2].w;
+
+					triProjected.t[0].v = triProjected.t[0].v / triProjected.p[0].w;
+					triProjected.t[1].v = triProjected.t[1].v / triProjected.p[1].w;
+					triProjected.t[2].v = triProjected.t[2].v / triProjected.p[2].w;
+
+					triProjected.t[0].w = 1.0f / triProjected.p[0].w;
+					triProjected.t[1].w = 1.0f / triProjected.p[1].w;
+					triProjected.t[2].w = 1.0f / triProjected.p[2].w;
+
 					// scale into view
 					triProjected.p[0] = Vector_Div(triProjected.p[0], triProjected.p[0].w);
 					triProjected.p[1] = Vector_Div(triProjected.p[1], triProjected.p[1].w);
@@ -580,12 +641,19 @@ public:
 		}
 
 		// sort tris from back to front
-		sort(vecTrianglesToRaster.begin(), vecTrianglesToRaster.end(), [](triangle& t1, triangle& t2)
+		/*sort(vecTrianglesToRaster.begin(), vecTrianglesToRaster.end(), [](triangle& t1, triangle& t2)
 			{
 				float z1 = (t1.p[0].z + t1.p[1].z + t1.p[2].z) / 3.0f;
 				float z2 = (t2.p[0].z + t2.p[1].z + t2.p[2].z) / 3.0f;
 				return z1 > z2;
-			});
+			});*/
+
+		// clear screen
+		Fill(0, 0, ScreenWidth(), ScreenWidth(), PIXEL_SOLID, FG_CYAN);
+
+		// clear depth buffer
+		for (int i = 0; i < ScreenWidth() * ScreenHeight(); i++)
+			pDepthBuffer[i] = 0.0f;
 
 		/*for (auto &triProjected : vecTrianglesToRaster)
 		{
@@ -656,9 +724,11 @@ public:
 
 			for (auto& t : listTriangles)
 			{
-				TexturedTriangle(t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v,
-					t.p[1].x, t.p[1].y, t.t[1].u, t.t[1].v,
-					t.p[2].x, t.p[2].y, t.t[2].u, t.t[2].v, sprTex1);
+				TexturedTriangle(
+					t.p[0].x, t.p[0].y, t.t[0].u, t.t[0].v, t.t[0].w,
+					t.p[1].x, t.p[1].y, t.t[1].u, t.t[1].v, t.t[1].w,
+					t.p[2].x, t.p[2].y, t.t[2].u, t.t[2].v, t.t[2].w,
+					sprTex1);
 
 				//FillTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, t.sym, t.col);
 				DrawTriangle(t.p[0].x, t.p[0].y, t.p[1].x, t.p[1].y, t.p[2].x, t.p[2].y, PIXEL_SOLID, FG_WHITE);
@@ -668,9 +738,9 @@ public:
 		return true;
 	}
 
-	void TexturedTriangle(int x1, int y1, float u1, float v1,
-								int x2, int y2, float u2, float v2,
-								int x3, int y3, float u3, float v3,
+	void TexturedTriangle(int x1, int y1, float u1, float v1,  float w1,
+								 int x2, int y2, float u2, float v2,  float w2,
+								 int x3, int y3, float u3, float v3,  float w3,
 								olcSprite* tex)
 	{
 		if (y2 < y1)
@@ -679,6 +749,7 @@ public:
 			swap(x1, x2);
 			swap(u1, u2);
 			swap(v1, v2);
+			swap(w1, w2);
 		}
 		if (y3 < y1)
 		{
@@ -699,17 +770,20 @@ public:
 		int dx1 = x2 - x1;
 		float dv1 = v2 - v1;
 		float du1 = u2 - u1;
+		float dw1 = w2 - w1;
 
 		int dy2 = y3 - y1;
 		int dx2 = x3 - x1;
 		float dv2 = v3 - v1;
 		float du2 = u3 - u1;
+		float dw2 = w3 - w1;
 
-		float tex_u, tex_v;
+		float tex_u, tex_v, tex_w;
 
 		float dax_step = 0, dbx_step = 0,
 			du1_step = 0, dv1_step = 0,
-			du2_step = 0, dv2_step = 0;
+			du2_step = 0, dv2_step = 0,
+			dw1_step, dw2_step;
 
 		if (dy1)
 			dax_step = dx1 / (float)abs(dy1);
@@ -720,11 +794,15 @@ public:
 			du1_step = du1 / (float)abs(dy1);
 		if (dy1)
 			dv1_step = dv1 / (float)abs(dy1);
+		if (dy1)
+			dw1_step = dw1 / (float)abs(dy1);
 
 		if (dy2)
 			du2_step = du2 / (float)abs(dy2);
 		if (dy2)
 			dv2_step = dv2 / (float)abs(dy2);
+		if (dy2)
+			dw2_step = dw2 / (float)abs(dy2);
 
 		if (dy1)
 		{
@@ -735,9 +813,11 @@ public:
 
 				float tex_su = u1 + (float)(i - y1) * du1_step;
 				float tex_sv = v1 + (float)(i - y1) * dv1_step;
+				float tex_sw = w1 + (float)(i - y1) * dw1_step;
 
 				float tex_eu = u1 + (float)(i - y1) * du2_step;
 				float tex_ev = v1 + (float)(i - y1) * dv2_step;
+				float tex_ew = w1 + (float)(i - y1) * dw2_step;
 
 				if (ax > bx)
 				{
@@ -756,7 +836,13 @@ public:
 				{
 					tex_u = (1.0f - t) * tex_su + t * tex_eu;
 					tex_v = (1.0f - t) * tex_sv + t * tex_ev;
-					Draw(j, i, tex->SampleGlyph(tex_u, tex_v), tex->SampleColour(tex_u, tex_v));
+					tex_w = (1.0f - t) * tex_sw + t * tex_ew;
+
+					if (tex_w > pDepthBuffer[i * ScreenWidth() + j])
+					{
+						Draw(j, i, tex->SampleGlyph(tex_u / tex_w, tex_v / tex_w), tex->SampleColour(tex_u, tex_v));
+						pDepthBuffer[i * ScreenWidth() + j] = tex_w;
+					}
 					
 					t += tstep;
 				}
